@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>ScorePrediction - Standings</title>
+	<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+	<header>
+		<h1>League Standings</h1>
+	</header>
+	<main>
+		<section class="controls">
+			<label>
+				Season
+				<input id="season" type="number" min="2000" max="2100" value="2025">
+			</label>
+			<label>
+				League
+				<select id="league">
+					<option value="39">Premier League (39)</option>
+					<option value="140">La Liga (140)</option>
+					<option value="135">Serie A (135)</option>
+					<option value="61">Ligue 1 (61)</option>
+					<option value="78">Bundesliga (78)</option>
+					<option value="383">Ligat Ha'Al (383)</option>
+					<option value="2">UEFA Champions League (2)</option>
+					<option value="3">UEFA Europa League (3)</option>
+					<option value="1">World Cup (1)</option>
+				</select>
+			</label>
+			<button id="loadBtn">Load Standings</button>
+			<span id="status" class="status"></span>
+		</section>
+
+		<section class="controls">
+			<label>
+				Team 1 position
+				<input id="team1" type="number" min="1" placeholder="e.g. 1">
+			</label>
+			<label>
+				Team 2 position
+				<input id="team2" type="number" min="1" placeholder="e.g. 2">
+			</label>
+			<button id="predictBtn">Compare Teams</button>
+			<span id="predictStatus" class="status"></span>
+		</section>
+
+		<section id="results"></section>
+	</main>
+	<script src="app.js"></script>
+</body>
+</html>
+
+
