@@ -11,6 +11,9 @@ const team1El = $("#team1");
 const team2El = $("#team2");
 const predictBtn = $("#predictBtn");
 const predictStatusEl = $("#predictStatus");
+const groupWrapEl = $("#groupWrap");
+const groupEl = $("#group");
+let selectedGroup = "";
 
 function setStatus(msg) {
 	statusEl.textContent = msg || "";
@@ -20,6 +23,68 @@ function setPredictStatus(msg) {
 	predictStatusEl.textContent = msg || "";
 }
 
+function isChampionsLeague(leagueId, leagueName) {
+	if (leagueId != null && Number(leagueId) === 2) return true;
+	if (leagueName != null && String(leagueName).toLowerCase().includes("champions league")) return true;
+	return false;
+}
+
+function shouldShowGroup() {
+	const season = Number(seasonEl.value || 0);
+	const leagueId = leagueEl.value;
+	const leagueName = (leagueEl.options[leagueEl.selectedIndex]?.text || "");
+	return isChampionsLeague(leagueId, leagueName) && season < 2024;
+}
+
+function updateGroupVisibility() {
+	const show = shouldShowGroup();
+	groupWrapEl.style.display = show ? "" : "none";
+	if (!show) {
+		// Group not applicable; clear selection and enable team selectors
+		selectedGroup = "";
+		if (groupEl) groupEl.value = "";
+		team1El.disabled = false;
+		team2El.disabled = false;
+	} else {
+		// Group required; if none selected yet, keep placeholder and disable team selectors
+		if (!selectedGroup) {
+			if (groupEl) groupEl.value = "";
+			team1El.disabled = true;
+			team2El.disabled = true;
+		} else {
+			team1El.disabled = false;
+			team2El.disabled = false;
+		}
+	}
+	updatePredictButtonDisabled();
+}
+
+function clearTeamSelections() {
+	team1El.value = "";
+	team2El.value = "";
+	updatePredictButtonDisabled();
+}
+
+function onGroupSelected(group) {
+	selectedGroup = group;
+	clearTeamSelections();
+	// Enable team selectors now that a group is chosen
+	team1El.disabled = !selectedGroup;
+	team2El.disabled = !selectedGroup;
+	updatePredictButtonDisabled();
+}
+
+function handleGroupChange(e) {
+	const g = e.target.value;
+	onGroupSelected(g);
+}
+
+function updatePredictButtonDisabled() {
+	const requiresGroup = shouldShowGroup();
+	const hasGroup = !requiresGroup || !!selectedGroup;
+	const hasTeams = !!team1El.value.trim() && !!team2El.value.trim();
+	predictBtn.disabled = !(hasGroup && hasTeams);
+}
 function createTable(groups, groupTitle) {
 	const wrapper = document.createElement("div");
 	wrapper.className = "group";
@@ -153,7 +218,15 @@ async function loadStandings() {
 }
 
 loadBtn.addEventListener("click", loadStandings);
-document.addEventListener("DOMContentLoaded", loadStandings);
+document.addEventListener("DOMContentLoaded", () => {
+	updateGroupVisibility();
+	loadStandings();
+	updatePredictButtonDisabled();
+});
+leagueEl.addEventListener("change", () => { updateGroupVisibility(); updatePredictButtonDisabled(); });
+seasonEl.addEventListener("input", () => { updateGroupVisibility(); updatePredictButtonDisabled(); });
+team1El.addEventListener("input", updatePredictButtonDisabled);
+team2El.addEventListener("input", updatePredictButtonDisabled);
 
 function renderPrediction(json) {
 	const wrap = document.createElement("div");
@@ -193,8 +266,16 @@ async function predict() {
 		predictBtn.disabled = true;
 		setPredictStatus("Computing...");
 
-		const url = `/predict?season=${encodeURIComponent(season)}&league=${encodeURIComponent(league)}&team1=${encodeURIComponent(team1)}&team2=${encodeURIComponent(team2)}`;
-		const resp = await fetch(url);
+		const base = `/predict?season=${encodeURIComponent(season)}&league=${encodeURIComponent(league)}&team1=${encodeURIComponent(team1)}&team2=${encodeURIComponent(team2)}`;
+		const requiresGroup = shouldShowGroup();
+		if (requiresGroup && !selectedGroup) {
+			setPredictStatus("Please choose a group.");
+			return;
+		}
+		const groupQuery = requiresGroup && selectedGroup ? `&group=${encodeURIComponent(selectedGroup)}` : "";
+		const url = `${base}${groupQuery}`;
+		console.log('Predict params:', { league, season, selectedGroup, teamA: team1, teamB: team2 });
+		const resp = await fetch(url, { cache: 'no-store' });
 		const text = await resp.text();
 
 		let json;
@@ -219,5 +300,6 @@ async function predict() {
 }
 
 predictBtn.addEventListener("click", predict);
+groupEl.addEventListener("change", handleGroupChange);
 
 

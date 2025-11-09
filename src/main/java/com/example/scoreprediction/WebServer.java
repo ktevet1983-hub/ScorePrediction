@@ -88,6 +88,7 @@ public class WebServer {
                 String season = queryParams.get("season");
                 String team1Param = queryParams.get("team1");
                 String team2Param = queryParams.get("team2");
+                String group = queryParams.get("group");
 
                 if (league == null || league.isBlank() ||
                         season == null || season.isBlank() ||
@@ -95,6 +96,23 @@ public class WebServer {
                         team2Param == null || team2Param.isBlank()) {
                     sendJson(exchange, 400, "{\"error\":\"Missing required query params: league, season, team1, team2\"}");
                     return;
+                }
+
+                boolean championsLeague = "2".equals(league);
+                int seasonInt;
+                try {
+                    seasonInt = Integer.parseInt(season);
+                } catch (NumberFormatException nfe) {
+                    sendJson(exchange, 400, "{\"error\":\"season must be an integer\"}");
+                    return;
+                }
+
+                // For Champions League before 2024, group is required
+                if (championsLeague && seasonInt < 2024) {
+                    if (group == null || group.isBlank()) {
+                        sendJson(exchange, 400, "{\"error\":\"group is required for Champions League before 2024\"}");
+                        return;
+                    }
                 }
 
                 int team1IndexOneBased;
@@ -126,14 +144,49 @@ public class WebServer {
                     return;
                 }
 
-                // Use the first standings block (regular leagues). For cups with groups, client should pass correct indices; we keep simple here.
+                // Log predict parameters
+                System.out.println("Predict params => league=" + league + ", season=" + season + ", group=" + (group == null ? "null" : group) + ", teamA=" + team1Param + ", teamB=" + team2Param);
+
+                // Determine which standings block to use
                 Object[] standingsBlocks = responseObject.getLeague().getStandings();
-                if (standingsBlocks.length == 0 || !(standingsBlocks[0] instanceof ArrayList)) {
+                if (standingsBlocks.length == 0) {
                     sendJson(exchange, 502, "{\"error\":\"Unexpected standings format\"}");
                     return;
                 }
-                @SuppressWarnings("unchecked")
-                ArrayList<LinkedTreeMap<String, Object>> standing = (ArrayList<LinkedTreeMap<String, Object>>) standingsBlocks[0];
+
+                ArrayList<LinkedTreeMap<String, Object>> standing;
+                if (championsLeague && seasonInt < 2024) {
+                    // Map group letter to index 0..7
+                    int groupIndex = -1;
+                    if (group != null) {
+                        String g = group.trim().toUpperCase();
+                        if (g.length() == 1) {
+                            char c = g.charAt(0);
+                            if (c >= 'A' && c <= 'H') {
+                                groupIndex = c - 'A';
+                            }
+                        }
+                    }
+                    if (groupIndex < 0 || groupIndex >= standingsBlocks.length) {
+                        sendJson(exchange, 400, "{\"error\":\"Invalid group. Expected A-H\"}");
+                        return;
+                    }
+                    if (!(standingsBlocks[groupIndex] instanceof ArrayList)) {
+                        sendJson(exchange, 502, "{\"error\":\"Unexpected standings format for selected group\"}");
+                        return;
+                    }
+                    @SuppressWarnings("unchecked")
+                    ArrayList<LinkedTreeMap<String, Object>> s = (ArrayList<LinkedTreeMap<String, Object>>) standingsBlocks[groupIndex];
+                    standing = s;
+                } else {
+                    if (!(standingsBlocks[0] instanceof ArrayList)) {
+                        sendJson(exchange, 502, "{\"error\":\"Unexpected standings format\"}");
+                        return;
+                    }
+                    @SuppressWarnings("unchecked")
+                    ArrayList<LinkedTreeMap<String, Object>> s = (ArrayList<LinkedTreeMap<String, Object>>) standingsBlocks[0];
+                    standing = s;
+                }
 
                 int maxIndex = standing.size();
                 int team1Idx = team1IndexOneBased - 1;

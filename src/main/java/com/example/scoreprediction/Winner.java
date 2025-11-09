@@ -18,6 +18,20 @@ public class Winner extends LeagueRequest {
         super(fullResponse);
     }
 
+    private boolean isChampionsLeague(Integer leagueId, String leagueName) {
+        if (leagueId != null && leagueId == 2) return true;
+        if (leagueName != null && leagueName.toLowerCase().contains("champions league")) return true;
+        return false;
+    }
+
+    public void howWillWinAuto(Integer leagueId, String leagueName, int season, String url) throws Exception {
+        if (isChampionsLeague(leagueId, leagueName) && season >= 2024) {
+            this.howWillWin(url);
+        } else {
+            this.howWillWinForGroupStage(url);
+        }
+    }
+
     @Override
     public String setRequset(String url, String token, String host) throws Exception {
         Gson gson = new Gson();
