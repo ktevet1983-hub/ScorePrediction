@@ -24,6 +24,18 @@ public class Winner extends LeagueRequest {
         return false;
     }
 
+    public static boolean isChampionsLeague(String leagueId) {
+        return LeagueUtils.isChampionsLeague(leagueId);
+    }
+
+    public static boolean isEuropaLeague(String leagueId) {
+        return LeagueUtils.isEuropaLeague(leagueId);
+    }
+
+    public static boolean isWorldCup(String leagueId) {
+        return LeagueUtils.isWorldCup(leagueId);
+    }
+
     public void howWillWinAuto(Integer leagueId, String leagueName, int season, String url) throws Exception {
         if (isChampionsLeague(leagueId, leagueName) && season >= 2024) {
             this.howWillWin(url);

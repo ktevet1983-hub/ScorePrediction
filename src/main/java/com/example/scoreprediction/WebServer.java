@@ -98,7 +98,9 @@ public class WebServer {
                     return;
                 }
 
-                boolean championsLeague = "2".equals(league);
+                boolean championsLeague = LeagueUtils.isChampionsLeague(league);
+                boolean europaLeague = LeagueUtils.isEuropaLeague(league);
+                boolean worldCup = LeagueUtils.isWorldCup(league);
                 int seasonInt;
                 try {
                     seasonInt = Integer.parseInt(season);
@@ -107,10 +109,20 @@ public class WebServer {
                     return;
                 }
 
-                // For Champions League before 2024, group is required
+                // For Champions League and Europa League before 2024, group is required
                 if (championsLeague && seasonInt < 2024) {
                     if (group == null || group.isBlank()) {
                         sendJson(exchange, 400, "{\"error\":\"group is required for Champions League before 2024\"}");
+                        return;
+                    }
+                } else if (europaLeague && seasonInt < 2024) {
+                    if (group == null || group.isBlank()) {
+                        sendJson(exchange, 400, "{\"error\":\"group is required for Europa League before 2024\"}");
+                        return;
+                    }
+                } else if (worldCup) {
+                    if (group == null || group.isBlank()) {
+                        sendJson(exchange, 400, "{\"error\":\"group is required for World Cup\"}");
                         return;
                     }
                 }
@@ -155,7 +167,7 @@ public class WebServer {
                 }
 
                 ArrayList<LinkedTreeMap<String, Object>> standing;
-                if (championsLeague && seasonInt < 2024) {
+                if (worldCup || (championsLeague && seasonInt < 2024) || (europaLeague && seasonInt < 2024)) {
                     // Map group letter to index 0..7
                     int groupIndex = -1;
                     if (group != null) {

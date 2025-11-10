@@ -29,11 +29,26 @@ function isChampionsLeague(leagueId, leagueName) {
 	return false;
 }
 
+function isEuropaLeague(leagueId, leagueName) {
+	if (leagueId != null && Number(leagueId) === 3) return true;
+	if (leagueName != null && String(leagueName).toLowerCase().includes("europa league")) return true;
+	return false;
+}
+
+function isWorldCup(leagueId, leagueName) {
+	if (leagueId != null && Number(leagueId) === 1) return true;
+	if (leagueName != null && String(leagueName).toLowerCase().includes("world cup")) return true;
+	return false;
+}
+
 function shouldShowGroup() {
 	const season = Number(seasonEl.value || 0);
 	const leagueId = leagueEl.value;
 	const leagueName = (leagueEl.options[leagueEl.selectedIndex]?.text || "");
-	return isChampionsLeague(leagueId, leagueName) && season < 2024;
+	const isUCL = isChampionsLeague(leagueId, leagueName);
+	const isUEL = isEuropaLeague(leagueId, leagueName);
+	const isWC = isWorldCup(leagueId, leagueName);
+	return ((isUCL || isUEL) && season < 2024) || isWC;
 }
 
 function updateGroupVisibility() {
