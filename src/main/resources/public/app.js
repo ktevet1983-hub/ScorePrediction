@@ -102,16 +102,17 @@ function updatePredictButtonDisabled() {
 }
 function createTable(groups, groupTitle) {
 	const wrapper = document.createElement("div");
-	wrapper.className = "group";
+	wrapper.className = "group sp-card";
 
 	if (groupTitle) {
 		const h = document.createElement("div");
-		h.className = "group-header";
+		h.className = "group-header sp-card__header";
 		h.textContent = groupTitle;
 		wrapper.appendChild(h);
 	}
 
 	const table = document.createElement("table");
+	table.className = "sp-table";
 	table.innerHTML = `
 		<thead>
 			<tr>
@@ -173,11 +174,11 @@ function renderStandings(json) {
 		}
 		const league = res.league || json?.league || null;
 		const title = document.createElement("div");
-		title.className = "group-header";
+		title.className = "group-header sp-card__header";
 		title.textContent = `${league?.name || "League"} — ${league?.season || ""} (${league?.country || ""})`;
 		// Put a top title bar
 		const titleWrap = document.createElement("div");
-		titleWrap.className = "group";
+		titleWrap.className = "group sp-card";
 		titleWrap.appendChild(title);
 		resultsEl.appendChild(titleWrap);
 
@@ -274,9 +275,9 @@ team2El.addEventListener("input", updatePredictButtonDisabled);
 
 function renderPrediction(json) {
 	const wrap = document.createElement("div");
-	wrap.className = "group";
+	wrap.className = "group sp-card";
 	const header = document.createElement("div");
-	header.className = "group-header";
+	header.className = "group-header sp-card__header";
 	header.textContent = "Prediction";
 	const body = document.createElement("div");
 	body.style.padding = "12px";

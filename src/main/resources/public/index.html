@@ -1,69 +1,76 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>ScorePrediction - Standings</title>
-	<link rel="stylesheet" href="styles.css">
+	<meta name="color-scheme" content="dark light">
+	<link rel="stylesheet" href="/styles.css?v=DS1">
 </head>
 <body>
-	<header>
-		<h1>League Standings</h1>
-	</header>
-	<main>
-		<section class="controls">
-			<label>
-				Season
-				<input id="season" type="number" min="2000" max="2100" value="2025">
-			</label>
-			<label>
-				League
-				<select id="league">
-					<option value="39">Premier League (39)</option>
-					<option value="140">La Liga (140)</option>
-					<option value="135">Serie A (135)</option>
-					<option value="61">Ligue 1 (61)</option>
-					<option value="78">Bundesliga (78)</option>
-					<option value="383">Ligat Ha'Al (383)</option>
-					<option value="2">UEFA Champions League (2)</option>
-					<option value="3">UEFA Europa League (3)</option>
-					<option value="1">World Cup (1)</option>
-				</select>
-			</label>
-			<label id="groupWrap" style="display:none">
-				Group
-				<select id="group" name="group">
-					<option value="" selected disabled>Choose group</option>
-					<option value="A">A</option>
-					<option value="B">B</option>
-					<option value="C">C</option>
-					<option value="D">D</option>
-					<option value="E">E</option>
-					<option value="F">F</option>
-					<option value="G">G</option>
-					<option value="H">H</option>
-				</select>
-			</label>
-			<button id="loadBtn">Load Standings</button>
-			<span id="status" class="status"></span>
-		</section>
+	<div class="sp-container">
+		<header>
+			<h1>League Standings</h1>
+		</header>
+		<main>
+			<section class="sp-card" style="padding:12px;">
+				<div class="sp-row" style="flex-wrap:wrap;">
+					<label>
+						Season
+						<input id="season" type="number" min="2000" max="2100" value="2025">
+					</label>
+					<label>
+						League
+						<select id="league">
+							<option value="39">Premier League (39)</option>
+							<option value="140">La Liga (140)</option>
+							<option value="135">Serie A (135)</option>
+							<option value="61">Ligue 1 (61)</option>
+							<option value="78">Bundesliga (78)</option>
+							<option value="383">Ligat Ha'Al (383)</option>
+							<option value="2">UEFA Champions League (2)</option>
+							<option value="3">UEFA Europa League (3)</option>
+							<option value="1">World Cup (1)</option>
+						</select>
+					</label>
+					<label id="groupWrap" style="display:none">
+						Group
+						<select id="group" name="group">
+							<option value="" selected disabled>Choose group</option>
+							<option value="A">A</option>
+							<option value="B">B</option>
+							<option value="C">C</option>
+							<option value="D">D</option>
+							<option value="E">E</option>
+							<option value="F">F</option>
+							<option value="G">G</option>
+							<option value="H">H</option>
+						</select>
+					</label>
+					<button id="loadBtn" class="sp-btn">Load Standings</button>
+					<span id="status" class="status"></span>
+				</div>
+			</section>
 
-		<section class="controls">
-			<label>
-				Team 1 position
-				<input id="team1" type="number" min="1" placeholder="e.g. 1">
-			</label>
-			<label>
-				Team 2 position
-				<input id="team2" type="number" min="1" placeholder="e.g. 2">
-			</label>
-			<button id="predictBtn">Compare Teams</button>
-			<span id="predictStatus" class="status"></span>
-		</section>
+			<section class="sp-card" style="padding:12px;margin-top:12px;">
+				<div class="sp-row" style="flex-wrap:wrap;">
+					<label>
+						Team 1 position
+						<input id="team1" type="number" min="1" placeholder="e.g. 1">
+					</label>
+					<label>
+						Team 2 position
+						<input id="team2" type="number" min="1" placeholder="e.g. 2">
+					</label>
+					<button id="predictBtn" class="sp-btn">Compare Teams</button>
+					<span id="predictStatus" class="status"></span>
+				</div>
+			</section>
 
-		<section id="results"></section>
-	</main>
-	<script src="app.js"></script>
+			<section id="results" style="margin-top:16px;display:grid;gap:16px;"></section>
+		</main>
+	</div>
+	<script src="/app.js?v=DS1"></script>
 </body>
 </html>
 

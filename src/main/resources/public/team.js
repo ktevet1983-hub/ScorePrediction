@@ -230,15 +230,15 @@ function setTitle(text) {
 }
 
 function renderError(message) {
-	contentEl.innerHTML = `<div class="group"><div class="group-header">Error</div><div style="padding:12px">${message || "Failed"}</div></div>`;
+	contentEl.innerHTML = `<div class="group sp-card"><div class="group-header sp-card__header">Error</div><div style="padding:12px">${message || "Failed"}</div></div>`;
 }
 
 function renderSquad(teamName, season, players, teamId) {
 	const wrap = document.createElement("div");
-	wrap.className = "group";
+	wrap.className = "group sp-card";
 
 	const header = document.createElement("div");
-	header.className = "group-header";
+	header.className = "group-header sp-card__header";
 	header.textContent = "Squad";
 	wrap.appendChild(header);
 
@@ -247,6 +247,7 @@ function renderSquad(teamName, season, players, teamId) {
 	scroll.style.webkitOverflowScrolling = "touch";
 
 	const table = document.createElement("table");
+	table.className = "sp-table";
 	table.innerHTML = `
 		<thead>
 			<tr>
@@ -272,9 +273,12 @@ function renderSquad(teamName, season, players, teamId) {
 		tr.innerHTML = `
 			<td class="mono">${p.number ?? "-"}</td>
 			<td>
-				<div class="team">
+				<div class="team sp-team">
 					${playerPhoto ? `<img src="${playerPhoto}" alt="${playerName}" style="width:36px;height:36px;object-fit:cover;border-radius:50%;">` : ""}
-					<span>${playerName}</span>
+					${playerId != null
+						? `<a href="/player.html?id=${encodeURIComponent(String(playerId))}&season=${encodeURIComponent(String(season))}" style="text-decoration:none;color:inherit"><span>${playerName}</span></a>`
+						: `<span>${playerName}</span>`
+					}
 				</div>
 			</td>
 			<td>${p.position ?? "-"}</td>
@@ -365,12 +369,12 @@ function renderSquad(teamName, season, players, teamId) {
 		const teamLogo = entry?.team?.logo || entry?.logo || "";
 		const players = Array.isArray(entry?.players) ? entry.players : [];
 		if (teamLogo) {
-			titleEl.innerHTML = `<div class="team"><img src="${teamLogo}" alt="${teamName} logo" style="width:50px;height:50px;object-fit:contain;"><span>${teamName} — ${season}</span></div>`;
+			titleEl.innerHTML = `<div class="team sp-team"><img src="${teamLogo}" alt="${teamName} logo" style="width:50px;height:50px;object-fit:contain;"><span>${teamName} — ${season}</span></div>`;
 		} else {
 			setTitle(`${teamName} — ${season}`);
 		}
 		if (players.length === 0) {
-			contentEl.innerHTML = `<div class="group"><div class="group-header">Squad</div><div style="padding:12px">No squad data available.</div></div>`;
+			contentEl.innerHTML = `<div class="group sp-card"><div class="group-header sp-card__header">Squad</div><div style="padding:12px">No squad data available.</div></div>`;
 			return;
 		}
 		metrics.squadDurationMs += (nowMs() - squadT0);
