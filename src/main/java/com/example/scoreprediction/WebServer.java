@@ -22,6 +22,13 @@ public class WebServer {
 
     private static final String API_HOST = "v3.football.api-sports.io";
     private static String apiKey;
+    // Simple short-lived cache for /players aggregation
+    private static final java.util.Map<String, CachedItem> playersCache = new java.util.HashMap<>();
+    static class CachedItem {
+        final long timeMs;
+        final String body;
+        CachedItem(long timeMs, String body) { this.timeMs = timeMs; this.body = body; }
+    }
 
     public static void main(String[] args) throws Exception {
         apiKey = System.getenv("API_FOOTBALL_KEY");
@@ -32,6 +39,9 @@ public class WebServer {
         HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
         server.createContext("/standings", new StandingsHandler());
         server.createContext("/predict", new PredictHandler());
+        server.createContext("/squad", new SquadHandler());
+        server.createContext("/profiles", new ProfilesHandler());
+        server.createContext("/players", new PlayersHandler());
         server.createContext("/", new StaticFileHandler());
         server.setExecutor(null);
         server.start();
@@ -63,8 +73,100 @@ public class WebServer {
                 FullResponse fullResponse = new FullResponse();
                 LeagueRequest leagueRequest = new LeagueRequest(fullResponse);
                 String json = leagueRequest.setRequset(url, apiKey, API_HOST);
+                // Log the raw JSON (truncated) to confirm structure
+                try {
+                    String preview = json == null ? "null" : (json.length() > 2000 ? json.substring(0, 2000) + "..." : json);
+                    System.out.println("Standings raw JSON preview: " + preview);
+                } catch (Exception ignored) {}
 
                 sendJson(exchange, 200, json);
+            } catch (Exception e) {
+                String message = e.getMessage() == null ? "Internal Server Error" : e.getMessage();
+                sendJson(exchange, 500, "{\"error\":\"" + escape(message) + "\"}");
+            }
+        }
+    }
+
+    static class PlayersHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            addCorsAndContentType(exchange.getResponseHeaders());
+            exchange.getResponseHeaders().set("Cache-Control", "public, max-age=90");
+
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendJson(exchange, 405, "{\"error\":\"Method Not Allowed\"}");
+                return;
+            }
+
+            try {
+                Map<String, String> queryParams = parseQueryParams(exchange.getRequestURI());
+                String teamParam = queryParams.get("team");
+                String seasonParam = queryParams.get("season");
+
+                if (teamParam == null || teamParam.isBlank() || seasonParam == null || seasonParam.isBlank()) {
+                    sendJson(exchange, 400, "{\"error\":\"Missing required query params: team, season\"}");
+                    return;
+                }
+
+                // Validate numeric inputs
+                try {
+                    Integer.parseInt(teamParam);
+                    Integer.parseInt(seasonParam);
+                } catch (NumberFormatException nfe) {
+                    sendJson(exchange, 400, "{\"error\":\"team and season must be integers\"}");
+                    return;
+                }
+
+                // Short in-memory cache to reduce repeated aggregations
+                String cacheKey = teamParam + ":" + seasonParam;
+                CachedItem cached = playersCache.get(cacheKey);
+                long now = System.currentTimeMillis();
+                if (cached != null && (now - cached.timeMs) < 90_000L && cached.body != null) {
+                    sendJson(exchange, 200, cached.body);
+                    return;
+                }
+
+                // Aggregate all pages from /players endpoint
+                com.google.gson.Gson gson = new com.google.gson.Gson();
+                java.util.List<Object> allPlayers = new java.util.ArrayList<>();
+                int page = 1;
+                int total = 1;
+                do {
+                    String url = "https://" + API_HOST + "/players?team=" + encode(teamParam) + "&season=" + encode(seasonParam) + "&page=" + page;
+                    System.out.println("Players request => url=" + url);
+                    LeagueRequest leagueRequest = new LeagueRequest(new FullResponse());
+                    String json = leagueRequest.setRequset(url, apiKey, API_HOST);
+
+                    @SuppressWarnings("unchecked")
+                    java.util.Map<String, Object> obj = gson.fromJson(json, java.util.Map.class);
+                    if (obj == null) obj = new java.util.HashMap<>();
+                    @SuppressWarnings("unchecked")
+                    java.util.Map<String, Object> paging = (java.util.Map<String, Object>) obj.get("paging");
+                    if (paging != null) {
+                        Object curObj = paging.get("current");
+                        Object totObj = paging.get("total");
+                        int cur = (curObj instanceof Number) ? ((Number) curObj).intValue() : page;
+                        total = (totObj instanceof Number) ? ((Number) totObj).intValue() : 1;
+                        page = cur; // ensure consistency
+                    } else {
+                        total = 1;
+                    }
+                    @SuppressWarnings("unchecked")
+                    java.util.List<Object> respList = (java.util.List<Object>) obj.get("response");
+                    if (respList != null) {
+                        allPlayers.addAll(respList);
+                    }
+                    page++;
+                } while (page <= total);
+
+                java.util.Map<String, Object> out = new java.util.HashMap<>();
+                out.put("results", allPlayers.size());
+                out.put("paging", java.util.Map.of("current", 1, "total", 1));
+                out.put("response", allPlayers);
+
+                String outJson = gson.toJson(out);
+                playersCache.put(cacheKey, new CachedItem(now, outJson));
+                sendJson(exchange, 200, outJson);
             } catch (Exception e) {
                 String message = e.getMessage() == null ? "Internal Server Error" : e.getMessage();
                 sendJson(exchange, 500, "{\"error\":\"" + escape(message) + "\"}");
@@ -294,6 +396,98 @@ public class WebServer {
                         + "\"winnerName\":" + (winnerName == null ? "null" : "\"" + escape(winnerName) + "\"")
                         + "}";
 
+                sendJson(exchange, 200, json);
+            } catch (Exception e) {
+                String message = e.getMessage() == null ? "Internal Server Error" : e.getMessage();
+                sendJson(exchange, 500, "{\"error\":\"" + escape(message) + "\"}");
+            }
+        }
+    }
+
+    static class SquadHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            addCorsAndContentType(exchange.getResponseHeaders());
+
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendJson(exchange, 405, "{\"error\":\"Method Not Allowed\"}");
+                return;
+            }
+
+            try {
+                Map<String, String> queryParams = parseQueryParams(exchange.getRequestURI());
+                String teamParam = queryParams.get("team");
+                String season = queryParams.get("season"); // optional, squads endpoint is current-season oriented
+
+                if (teamParam == null || teamParam.isBlank()) {
+                    sendJson(exchange, 400, "{\"error\":\"Missing required query param: team\"}");
+                    return;
+                }
+
+                // Validate team is integer-like to avoid accidental misuse
+                try {
+                    Integer.parseInt(teamParam);
+                } catch (NumberFormatException nfe) {
+                    sendJson(exchange, 400, "{\"error\":\"team must be an integer\"}");
+                    return;
+                }
+
+                // API-Football squads endpoint (current season): https://v3.football.api-sports.io/players/squads?team={TEAM_ID}
+                // Season is not supported on this endpoint; we ignore if provided, but keep behavior consistent.
+                String url = "https://" + API_HOST + "/players/squads?team=" + encode(teamParam);
+
+                // Log the outgoing URL and season hint for quick manual verification
+                System.out.println("Squad request => url=" + url + (season == null ? "" : (", season=" + season)));
+
+                LeagueRequest leagueRequest = new LeagueRequest(new FullResponse());
+                String json = leagueRequest.setRequset(url, apiKey, API_HOST);
+
+                // Basic sampling/logging of response size
+                System.out.println("Squad response length=" + (json == null ? 0 : json.length()));
+
+                sendJson(exchange, 200, json);
+            } catch (Exception e) {
+                String message = e.getMessage() == null ? "Internal Server Error" : e.getMessage();
+                sendJson(exchange, 500, "{\"error\":\"" + escape(message) + "\"}");
+            }
+        }
+    }
+
+    static class ProfilesHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            addCorsAndContentType(exchange.getResponseHeaders());
+
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendJson(exchange, 405, "{\"error\":\"Method Not Allowed\"}");
+                return;
+            }
+
+            try {
+                Map<String, String> queryParams = parseQueryParams(exchange.getRequestURI());
+                String playerParam = queryParams.get("player");
+
+                if (playerParam == null || playerParam.isBlank()) {
+                    sendJson(exchange, 400, "{\"error\":\"Missing required query param: player\"}");
+                    return;
+                }
+
+                // Validate player id is integer-like
+                try {
+                    Integer.parseInt(playerParam);
+                } catch (NumberFormatException nfe) {
+                    sendJson(exchange, 400, "{\"error\":\"player must be an integer\"}");
+                    return;
+                }
+
+                // API-Football player profiles endpoint: https://" + API_HOST + "/players/profiles?player={PLAYER_ID}
+                String url = "https://" + API_HOST + "/players/profiles?player=" + encode(playerParam);
+                System.out.println("Profiles request => url=" + url);
+
+                LeagueRequest leagueRequest = new LeagueRequest(new FullResponse());
+                String json = leagueRequest.setRequset(url, apiKey, API_HOST);
+
+                System.out.println("Profiles response length=" + (json == null ? 0 : json.length()));
                 sendJson(exchange, 200, json);
             } catch (Exception e) {
                 String message = e.getMessage() == null ? "Internal Server Error" : e.getMessage();

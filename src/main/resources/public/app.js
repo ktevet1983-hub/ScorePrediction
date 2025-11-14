@@ -135,7 +135,7 @@ function createTable(groups, groupTitle) {
 		const name = (t.team?.name || "").toString();
 		tr.innerHTML = `
 			<td class="mono">${t.rank ?? ""}</td>
-			<td class="team">${name}</td>
+			<td class="team"></td>
 			<td class="mono">${t.all?.played ?? ""}</td>
 			<td class="mono">${t.all?.win ?? ""}</td>
 			<td class="mono">${t.all?.draw ?? ""}</td>
@@ -145,6 +145,15 @@ function createTable(groups, groupTitle) {
 			<td class="mono">${t.goalsDiff ?? ""}</td>
 			<td class="mono">${t.points ?? ""}</td>
 		`;
+		// Make team name a link to team roster page with season query
+		const teamCell = tr.querySelector("td.team");
+		const a = document.createElement("a");
+		a.className = "team-link";
+		const seasonVal = seasonEl?.value || "";
+		const teamId = t?.team?.id != null ? String(t.team.id) : "";
+		a.href = `/team.html?id=${encodeURIComponent(teamId)}${seasonVal ? `&season=${encodeURIComponent(seasonVal)}` : ""}`;
+		a.textContent = name;
+		teamCell.appendChild(a);
 		tbody.appendChild(tr);
 	}
 	wrapper.appendChild(table);
@@ -154,12 +163,15 @@ function createTable(groups, groupTitle) {
 function renderStandings(json) {
 	resultsEl.innerHTML = "";
 	try {
-		const res = json?.response?.[0];
+		// Try to be resilient to possible response shape changes
+		const responseArray = Array.isArray(json?.response) ? json.response : (json?.response ? [json.response] : []);
+		const res = responseArray[0];
 		if (!res) {
+			console.log("[standings] Empty response array or missing response field", json);
 			resultsEl.textContent = "No data returned.";
 			return;
 		}
-		const league = res.league;
+		const league = res.league || json?.league || null;
 		const title = document.createElement("div");
 		title.className = "group-header";
 		title.textContent = `${league?.name || "League"} — ${league?.season || ""} (${league?.country || ""})`;
@@ -170,12 +182,18 @@ function renderStandings(json) {
 		resultsEl.appendChild(titleWrap);
 
 		// standings can be: [ [ {team...}, ... ] ] or for cups: [ [groupA...], [groupB...] ... ]
-		const standings = league?.standings;
+		const standings = league?.standings || res?.standings || json?.standings;
 		if (!Array.isArray(standings)) {
+			console.log("[standings] Unexpected format; league.standings:", league?.standings, "res.standings:", res?.standings);
 			resultsEl.appendChild(document.createTextNode("Unexpected standings format."));
 			return;
 		}
 
+		if (standings.length === 0) {
+			console.log("[standings] standings is an empty array");
+		}
+
+		console.log("[standings] blocks:", standings.length);
 		for (const block of standings) {
 			// block is an array of teams (possibly all same group) or contains group markers
 			if (!Array.isArray(block)) continue;
@@ -207,7 +225,7 @@ async function loadStandings() {
 		resultsEl.innerHTML = "";
 
 		const url = `/standings?season=${encodeURIComponent(season)}&league=${encodeURIComponent(league)}`;
-		const resp = await fetch(url);
+		const resp = await fetch(url, { cache: "no-store" });
 		const text = await resp.text();
 
 		let json;
@@ -221,6 +239,17 @@ async function loadStandings() {
 			const message = json?.error || resp.statusText || "Request failed";
 			throw new Error(message);
 		}
+		// Instrumentation logs for diagnostics
+		try {
+			console.log("[standings] raw length:", text?.length || 0);
+			console.log("[standings] parsed top-level keys:", Object.keys(json || {}));
+			const respArr = Array.isArray(json?.response) ? json.response : (json?.response ? [json.response] : []);
+			console.log("[standings] response array length:", respArr.length);
+			const first = respArr[0] || null;
+			const leagueObj = first?.league || json?.league || null;
+			console.log("[standings] league present:", !!leagueObj, "season:", leagueObj?.season, "name:", leagueObj?.name);
+			console.log("[standings] league.standings type:", Array.isArray(leagueObj?.standings) ? "array" : typeof leagueObj?.standings);
+		} catch {}
 		renderStandings(json);
 		setStatus("");
 	} catch (err) {

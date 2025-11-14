@@ -7,6 +7,8 @@ public class League {
     Integer season;
     String name;
     String country;
+    String logo; // League logo URL
+    String flag; // Country flag URL associated with the league
     Object[] standings;
 
 
@@ -27,6 +29,14 @@ public class League {
         this.country = country;
     }
 
+    public void setLogo(String logo) {
+        this.logo = logo;
+    }
+
+    public void setFlag(String flag) {
+        this.flag = flag;
+    }
+
     public void setStandings(Object[] standings) {
         this.standings = standings;
     }
@@ -41,6 +51,14 @@ public class League {
 
     public String getCountry() {
         return country;
+    }
+
+    public String getLogo() {
+        return logo;
+    }
+
+    public String getFlag() {
+        return flag;
     }
 
     public Object[] getStandings() {
