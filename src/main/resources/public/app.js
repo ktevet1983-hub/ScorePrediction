@@ -41,6 +41,19 @@ function isWorldCup(leagueId, leagueName) {
 	return false;
 }
 
+// Convert a pair of raw scores into percentages. Client-side only.
+function toPercentages(s1, s2) {
+	const a = Number(s1) || 0;
+	const b = Number(s2) || 0;
+	const total = a + b;
+	if (total <= 0) {
+		return { p1: 50, p2: 50 };
+	}
+	const p1 = Math.round((a / total) * 100);
+	const p2 = 100 - p1;
+	return { p1, p2 };
+}
+
 function shouldShowGroup() {
 	const season = Number(seasonEl.value || 0);
 	const leagueId = leagueEl.value;
@@ -284,20 +297,32 @@ function renderPrediction(json) {
 
 	const t1 = json?.team1Name || "Team 1";
 	const t2 = json?.team2Name || "Team 2";
-	const s1 = json?.score1;
-	const s2 = json?.score2;
+	// Be resilient to server field names
+	const s1Raw = (json?.scoreTeam1 ?? json?.score1);
+	const s2Raw = (json?.scoreTeam2 ?? json?.score2);
+	const s1 = (s1Raw != null ? Number(s1Raw) : undefined);
+	const s2 = (s2Raw != null ? Number(s2Raw) : undefined);
+	const { p1, p2 } = toPercentages(s1, s2);
 	let outcomeText = "Draw";
 	if (json?.result === "team1") outcomeText = `${t1} will likely win`;
 	if (json?.result === "team2") outcomeText = `${t2} will likely win`;
 
 	body.innerHTML = `
 		<div style="margin-bottom:8px"><strong>${t1}</strong> vs <strong>${t2}</strong></div>
-		<div style="margin-bottom:8px" class="mono">Score: ${s1} - ${s2}</div>
+		<div style="margin-bottom:8px" class="mono">${p1}% : ${p2}%</div>
 		<div><strong>${outcomeText}</strong></div>
 	`;
 	wrap.appendChild(header);
 	wrap.appendChild(body);
 	resultsEl.appendChild(wrap);
+	// Smooth scroll to the newly rendered result card
+	try {
+		if (wrap && typeof wrap.scrollIntoView === "function") {
+			wrap.scrollIntoView({ behavior: "smooth", block: "start" });
+		} else if (resultsEl && typeof resultsEl.scrollIntoView === "function") {
+			resultsEl.scrollIntoView({ behavior: "smooth", block: "start" });
+		}
+	} catch {}
 }
 
 async function predict() {

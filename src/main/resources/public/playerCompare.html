@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Better Player</title>
+	<meta name="color-scheme" content="dark light">
+	<link rel="stylesheet" href="/styles.css?v=DS1">
+</head>
+<body>
+	<div id="global-nav"></div>
+	<script src="/nav-loader.js" defer></script>
+	<div class="sp-container">
+
+		<main class="player-compare-page">
+			<h1 class="landing-title">Which Player Is Better?</h1>
+
+			<div class="player-compare-grid">
+				<section class="player-column" id="pc-col-1">
+					<div class="sp-card" style="margin-bottom:12px;">
+						<div class="sp-card__header">Player 1</div>
+					</div>
+
+					<div class="sp-card player-filter-card" style="padding:12px;">
+						<div class="sp-row player-filter-row" style="flex-wrap:wrap;">
+							<label>
+								Season
+								<input type="number" id="pc-season-1" min="2000" max="2100" value="2025">
+							</label>
+							<label>
+								League
+								<select id="pc-league-1">
+									<option value="" selected disabled>Choose league</option>
+								</select>
+							</label>
+							<label>
+								Team
+								<select id="pc-team-1" disabled>
+									<option value="" selected disabled>Choose team</option>
+								</select>
+							</label>
+						</div>
+					</div>
+
+					<div class="sp-card" id="pc-squad-card-1">
+						<div class="sp-card__header">Squad</div>
+						<div style="padding:12px;overflow:auto;">
+							<table class="sp-table" id="pc-squad-table-1">
+								<thead>
+									<tr>
+										<th>Player</th>
+										<th>Position</th>
+										<th class="mono">#</th>
+										<th class="mono">Age</th>
+									</tr>
+								</thead>
+								<tbody></tbody>
+							</table>
+						</div>
+					</div>
+				</section>
+
+				<section class="player-column" id="pc-col-2">
+					<div class="sp-card" style="margin-bottom:12px;">
+						<div class="sp-card__header">Player 2</div>
+					</div>
+
+					<div class="sp-card player-filter-card" style="padding:12px;">
+						<div class="sp-row player-filter-row" style="flex-wrap:wrap;">
+							<label>
+								Season
+								<input type="number" id="pc-season-2" min="2000" max="2100" value="2025">
+							</label>
+							<label>
+								League
+								<select id="pc-league-2">
+									<option value="" selected disabled>Choose league</option>
+								</select>
+							</label>
+							<label>
+								Team
+								<select id="pc-team-2" disabled>
+									<option value="" selected disabled>Choose team</option>
+								</select>
+							</label>
+						</div>
+					</div>
+
+					<div class="sp-card" id="pc-squad-card-2">
+						<div class="sp-card__header">Squad</div>
+						<div style="padding:12px;overflow:auto;">
+							<table class="sp-table" id="pc-squad-table-2">
+								<thead>
+									<tr>
+										<th>Player</th>
+										<th>Position</th>
+										<th class="mono">#</th>
+										<th class="mono">Age</th>
+									</tr>
+								</thead>
+								<tbody></tbody>
+							</table>
+						</div>
+					</div>
+				</section>
+			</div>
+
+			<div style="margin-top:24px; text-align:center;">
+				<button id="pc-compare-btn" class="sp-btn" disabled>Compare Players</button>
+			</div>
+
+			<section id="pc-result" style="margin-top:16px;"></section>
+		</main>
+	</div>
+	<script src="/js/safeAsync.js?v=DS1" defer></script>
+	<script src="/playerCompare.js?v=DS1" defer></script>
+</body>
+</html>
+
+

@@ -116,3 +116,81 @@ a:hover { text-decoration: underline; }
 
 .sp-team { display: flex; gap: 8px; align-items: center; }
 .sp-team img { width: 36px; height: 36px; object-fit: contain; }
+
+/* ===============================
+   Navigation
+   =============================== */
+.sp-nav {
+	display: flex;
+	gap: var(--sp-gap);
+	margin-bottom: 16px;
+}
+.sp-nav__tab {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	height: 36px;
+	padding: 0 14px;
+	border-radius: var(--sp-radius-sm);
+	border: 1px solid var(--sp-border);
+	background: color-mix(in srgb, var(--sp-panel) 92%, transparent);
+	color: var(--sp-text);
+	font-weight: 700;
+	cursor: pointer;
+	transition: background .15s ease, border-color .15s ease;
+}
+.sp-nav__tab:hover {
+	text-decoration: none;
+	background: color-mix(in srgb, var(--sp-accent) 10%, var(--sp-panel));
+	border-color: color-mix(in srgb, var(--sp-accent) 35%, var(--sp-border));
+}
+.sp-nav__tab.is-active {
+	color: #001b2b;
+	background: linear-gradient(90deg, var(--sp-accent), var(--sp-accent-2));
+	border-color: transparent;
+	cursor: default;
+	pointer-events: none;
+}
+
+/* ===============================
+   Landing Hero
+   =============================== */
+.landing-hero {
+	min-height: calc(100vh - 120px);
+	display: grid;
+	place-items: center;
+	align-content: center;
+	gap: 24px;
+	text-align: center;
+}
+.landing-title {
+	font-size: clamp(28px, 6vw, 54px);
+	line-height: 1.1;
+	margin: 0;
+	color: var(--sp-text);
+	text-shadow: 0 2px 24px color-mix(in srgb, var(--sp-accent) 25%, transparent);
+}
+.landing-illustration img {
+	width: min(60vw, 360px);
+	height: auto;
+	display: block;
+	margin: 0 auto;
+	filter: drop-shadow(0 12px 40px color-mix(in srgb, var(--sp-accent-2) 25%, transparent));
+	user-select: none;
+}
+
+/* ===============================
+   Player Compare Page
+   =============================== */
+.player-compare-page { margin-top: 16px; }
+.player-compare-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 860px) {
+	.player-compare-grid { grid-template-columns: 1fr; }
+}
+.player-column { display: flex; flex-direction: column; gap: 12px; }
+.player-filter-row label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.sp-table tbody tr.is-selected td {
+	outline: 2px solid var(--sp-accent-2);
+	background: color-mix(in srgb, var(--sp-accent) 15%, var(--sp-panel));
+}
+.sp-table tbody tr.is-disabled td { opacity: .6; cursor: not-allowed; }

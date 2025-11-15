@@ -2,6 +2,8 @@ package com.example.scoreprediction;
 
 import com.google.gson.Gson;
 import com.google.gson.internal.LinkedTreeMap;
+import com.example.scoreprediction.prediction.PredictionResult;
+import com.example.scoreprediction.prediction.TeamComparator;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -59,6 +61,43 @@ public class Winner extends LeagueRequest {
     }
 
     public void howWillWinForGroupStage(String url) throws Exception {
+        // Thin wrapper to new comparison engine (non-interactive)
+        try {
+            String apiHost = "v3.football.api-sports.io";
+            String apiToken = System.getenv("API_FOOTBALL_KEY");
+            if (apiToken == null || apiToken.isBlank()) {
+                apiToken = "ee76c4ea94da4bd64c294500e1037d8e";
+            }
+            Gson gson = new Gson();
+            FullResponse fr = gson.fromJson(setRequset(url, apiToken, apiHost), FullResponse.class);
+            if (fr != null && fr.getResponse() != null && !fr.getResponse().isEmpty() && fr.getResponse().get(0).getLeague() != null) {
+                Object[] blocks = fr.getResponse().get(0).getLeague().getStandings();
+                if (blocks != null && blocks.length > 0) {
+                    @SuppressWarnings("unchecked")
+                    ArrayList<LinkedTreeMap<String, Object>> standing = (ArrayList<LinkedTreeMap<String, Object>>) blocks[0];
+                    if (standing.size() >= 2) {
+                        @SuppressWarnings("unchecked")
+                        LinkedTreeMap<String, Object> t1 = (LinkedTreeMap<String, Object>) standing.get(0).get("team");
+                        @SuppressWarnings("unchecked")
+                        LinkedTreeMap<String, Object> t2 = (LinkedTreeMap<String, Object>) standing.get(1).get("team");
+                        int teamId1 = ((Number) t1.get("id")).intValue();
+                        int teamId2 = ((Number) t2.get("id")).intValue();
+                        int leagueId = fr.getResponse().get(0).getLeague().getId();
+                        int season = fr.getResponse().get(0).getLeague().getSeason();
+                        TeamComparator comparator = new TeamComparator(apiToken, apiHost);
+                        TeamComparator.CompareArgs args = new TeamComparator.CompareArgs();
+                        args.leagueId = leagueId;
+                        args.season = season;
+                        args.teamId1 = teamId1;
+                        args.teamId2 = teamId2;
+                        args.isGroupStage = true;
+                        PredictionResult res = comparator.compareTeams(args);
+                        System.out.println(String.valueOf(t1.get("name")) + " vs " + String.valueOf(t2.get("name")) + " => " + res.winner + " " + res.scoreTeam1 + "-" + res.scoreTeam2);
+                        return;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
         String apiToken = "ee76c4ea94da4bd64c294500e1037d8e";
         String apiHost = "v3.football.api-sports.io";
         try {
@@ -559,6 +598,43 @@ public class Winner extends LeagueRequest {
     }
 
     public void howWillWin(String url) throws Exception {
+        // Thin wrapper to new comparison engine (non-interactive)
+        try {
+            String apiHost = "v3.football.api-sports.io";
+            String apiToken = System.getenv("API_FOOTBALL_KEY");
+            if (apiToken == null || apiToken.isBlank()) {
+                apiToken = "ee76c4ea94da4bd64c294500e1037d8e";
+            }
+            Gson gson = new Gson();
+            FullResponse fr = gson.fromJson(setRequset(url, apiToken, apiHost), FullResponse.class);
+            if (fr != null && fr.getResponse() != null && !fr.getResponse().isEmpty() && fr.getResponse().get(0).getLeague() != null) {
+                Object[] blocks = fr.getResponse().get(0).getLeague().getStandings();
+                if (blocks != null && blocks.length > 0) {
+                    @SuppressWarnings("unchecked")
+                    ArrayList<LinkedTreeMap<String, Object>> standing = (ArrayList<LinkedTreeMap<String, Object>>) blocks[0];
+                    if (standing.size() >= 2) {
+                        @SuppressWarnings("unchecked")
+                        LinkedTreeMap<String, Object> t1 = (LinkedTreeMap<String, Object>) standing.get(0).get("team");
+                        @SuppressWarnings("unchecked")
+                        LinkedTreeMap<String, Object> t2 = (LinkedTreeMap<String, Object>) standing.get(1).get("team");
+                        int teamId1 = ((Number) t1.get("id")).intValue();
+                        int teamId2 = ((Number) t2.get("id")).intValue();
+                        int leagueId = fr.getResponse().get(0).getLeague().getId();
+                        int season = fr.getResponse().get(0).getLeague().getSeason();
+                        TeamComparator comparator = new TeamComparator(apiToken, apiHost);
+                        TeamComparator.CompareArgs args = new TeamComparator.CompareArgs();
+                        args.leagueId = leagueId;
+                        args.season = season;
+                        args.teamId1 = teamId1;
+                        args.teamId2 = teamId2;
+                        args.isGroupStage = false;
+                        PredictionResult res = comparator.compareTeams(args);
+                        System.out.println(String.valueOf(t1.get("name")) + " vs " + String.valueOf(t2.get("name")) + " => " + res.winner + " " + res.scoreTeam1 + "-" + res.scoreTeam2);
+                        return;
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
         String apiToken = "ee76c4ea94da4bd64c294500e1037d8e";
         String apiHost = "v3.football.api-sports.io";
         try {

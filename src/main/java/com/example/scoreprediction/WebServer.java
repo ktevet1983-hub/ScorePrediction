@@ -6,6 +6,10 @@ import com.sun.net.httpserver.Headers;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpServer;
+import com.example.scoreprediction.prediction.PredictionResult;
+import com.example.scoreprediction.prediction.TeamComparator;
+import com.example.scoreprediction.prediction.PlayerComparator;
+import com.example.scoreprediction.prediction.PlayerComparisonResult;
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -23,7 +27,9 @@ public class WebServer {
     private static final String API_HOST = "v3.football.api-sports.io";
     private static String apiKey;
     // Simple short-lived cache for /players aggregation
-    private static final java.util.Map<String, CachedItem> playersCache = new java.util.HashMap<>();
+    private static final java.util.concurrent.ConcurrentHashMap<String, CachedItem> playersCache = new java.util.concurrent.ConcurrentHashMap<>();
+    // Short-lived cache for squads to avoid repeated fetches when re-selecting same team
+    private static final java.util.concurrent.ConcurrentHashMap<String, CachedItem> squadCache = new java.util.concurrent.ConcurrentHashMap<>();
     static class CachedItem {
         final long timeMs;
         final String body;
@@ -39,6 +45,10 @@ public class WebServer {
         HttpServer server = HttpServer.create(new InetSocketAddress(8080), 0);
         server.createContext("/standings", new StandingsHandler());
         server.createContext("/predict", new PredictHandler());
+        server.createContext("/predict/compare", new ComparePredictHandler());
+		server.createContext("/predict/comparePlayers", new ComparePlayersHandler());
+		// New alias for acceptance criteria
+		server.createContext("/predict/playerCompare", new ComparePlayersHandler());
         server.createContext("/squad", new SquadHandler());
         server.createContext("/profiles", new ProfilesHandler());
         server.createContext("/playerProfile", new PlayerProfileHandler());
@@ -81,6 +91,135 @@ public class WebServer {
                     System.out.println("Standings raw JSON preview: " + preview);
                 } catch (Exception ignored) {}
 
+                sendJson(exchange, 200, json);
+            } catch (Exception e) {
+                String message = e.getMessage() == null ? "Internal Server Error" : e.getMessage();
+                sendJson(exchange, 500, "{\"error\":\"" + escape(message) + "\"}");
+            }
+        }
+    }
+
+	// GET /predict/comparePlayers?league={id}&season={year}&team1={teamId1}&player1={playerId1}&team2={teamId2}&player2={playerId2}
+	static class ComparePlayersHandler implements HttpHandler {
+		@Override
+		public void handle(HttpExchange exchange) throws IOException {
+			addCorsAndContentType(exchange.getResponseHeaders());
+			exchange.getResponseHeaders().set("Cache-Control", "no-store");
+
+			if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+				sendJson(exchange, 405, "{\"error\":\"Method Not Allowed\"}");
+				return;
+			}
+
+			try {
+				Map<String, String> q = parseQueryParams(exchange.getRequestURI());
+				String leagueParam = q.get("league");
+				String seasonParam = q.get("season");
+				String team1Param = q.get("team1");
+				String player1Param = q.get("player1");
+				String team2Param = q.get("team2");
+				String player2Param = q.get("player2");
+
+				if (leagueParam == null || seasonParam == null || team1Param == null || player1Param == null || team2Param == null || player2Param == null
+						|| leagueParam.isBlank() || seasonParam.isBlank() || team1Param.isBlank() || player1Param.isBlank() || team2Param.isBlank() || player2Param.isBlank()) {
+					sendJson(exchange, 400, "{\"error\":\"Missing required query params: league, season, team1, player1, team2, player2\"}");
+					return;
+				}
+
+				int leagueId, season, team1, team2, player1, player2;
+				try {
+					leagueId = Integer.parseInt(leagueParam);
+					season = Integer.parseInt(seasonParam);
+					team1 = Integer.parseInt(team1Param);
+					player1 = Integer.parseInt(player1Param);
+					team2 = Integer.parseInt(team2Param);
+					player2 = Integer.parseInt(player2Param);
+				} catch (NumberFormatException nfe) {
+					sendJson(exchange, 400, "{\"error\":\"league, season, team1, player1, team2, player2 must be integers\"}");
+					return;
+				}
+				if (leagueId <= 0 || season <= 0 || team1 <= 0 || team2 <= 0 || player1 <= 0 || player2 <= 0) {
+					sendJson(exchange, 400, "{\"error\":\"All parameters must be positive integers\"}");
+					return;
+				}
+
+				PlayerComparator comparator = new PlayerComparator(apiKey, API_HOST);
+				PlayerComparator.PlayerCompareArgs args = new PlayerComparator.PlayerCompareArgs();
+				args.leagueId = leagueId;
+				args.season = season;
+				args.teamId1 = team1;
+				args.teamId2 = team2;
+				args.playerId1 = player1;
+				args.playerId2 = player2;
+				args.role = null; // derive from API
+
+				PlayerComparisonResult result;
+				try {
+					result = comparator.compare(args);
+				} catch (IllegalArgumentException bad) {
+					String msg = bad.getMessage() == null ? "Bad Request" : bad.getMessage();
+					sendJson(exchange, 400, "{\"error\":\"" + escape(msg) + "\"}");
+					return;
+				}
+				Gson gson = new Gson();
+				String json = gson.toJson(result);
+				sendJson(exchange, 200, json);
+			} catch (Exception e) {
+				String message = e.getMessage() == null ? "Internal Server Error" : e.getMessage();
+				sendJson(exchange, 500, "{\"error\":\"" + escape(message) + "\"}");
+			}
+		}
+	}
+
+    // GET /predict/compare?league=xxx&season=xxx&team1=xxx&team2=xxx&groupstage={true|false}
+    static class ComparePredictHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            addCorsAndContentType(exchange.getResponseHeaders());
+            exchange.getResponseHeaders().set("Cache-Control", "no-store");
+
+            if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+                sendJson(exchange, 405, "{\"error\":\"Method Not Allowed\"}");
+                return;
+            }
+
+            try {
+                Map<String, String> q = parseQueryParams(exchange.getRequestURI());
+                String leagueParam = q.get("league");
+                String seasonParam = q.get("season");
+                String team1Param = q.get("team1");
+                String team2Param = q.get("team2");
+                String groupStageParam = q.get("groupstage");
+
+                if (leagueParam == null || seasonParam == null || team1Param == null || team2Param == null
+                        || leagueParam.isBlank() || seasonParam.isBlank() || team1Param.isBlank() || team2Param.isBlank()) {
+                    sendJson(exchange, 400, "{\"error\":\"Missing required query params: league, season, team1, team2\"}");
+                    return;
+                }
+
+                int leagueId, season, team1, team2;
+                try {
+                    leagueId = Integer.parseInt(leagueParam);
+                    season = Integer.parseInt(seasonParam);
+                    team1 = Integer.parseInt(team1Param);
+                    team2 = Integer.parseInt(team2Param);
+                } catch (NumberFormatException nfe) {
+                    sendJson(exchange, 400, "{\"error\":\"league, season, team1, team2 must be integers\"}");
+                    return;
+                }
+                boolean isGroupStage = groupStageParam != null && ("true".equalsIgnoreCase(groupStageParam) || "1".equals(groupStageParam));
+
+                TeamComparator comparator = new TeamComparator(apiKey, API_HOST);
+                TeamComparator.CompareArgs args = new TeamComparator.CompareArgs();
+                args.leagueId = leagueId;
+                args.season = season;
+                args.teamId1 = team1;
+                args.teamId2 = team2;
+                args.isGroupStage = isGroupStage;
+
+                PredictionResult result = comparator.compareTeams(args);
+                Gson gson = new Gson();
+                String json = gson.toJson(result);
                 sendJson(exchange, 200, json);
             } catch (Exception e) {
                 String message = e.getMessage() == null ? "Internal Server Error" : e.getMessage();
@@ -312,92 +451,50 @@ public class WebServer {
                     return;
                 }
 
-                LinkedTreeMap<String, Object> teamObj1 = (LinkedTreeMap<String, Object>) standing.get(team1Idx).get("team");
-                LinkedTreeMap<String, Object> teamObj2 = (LinkedTreeMap<String, Object>) standing.get(team2Idx).get("team");
-                LinkedTreeMap<String, Object> allOfTeam1 = (LinkedTreeMap<String, Object>) standing.get(team1Idx).get("all");
-                LinkedTreeMap<String, Object> allOfTeam2 = (LinkedTreeMap<String, Object>) standing.get(team2Idx).get("all");
-                LinkedTreeMap<String, Object> goalsOfTeam1 = (LinkedTreeMap<String, Object>) ((LinkedTreeMap<?, ?>) standing.get(team1Idx).get("all")).get("goals");
-                LinkedTreeMap<String, Object> goalsOfTeam2 = (LinkedTreeMap<String, Object>) ((LinkedTreeMap<?, ?>) standing.get(team2Idx).get("all")).get("goals");
-
-                double playedTeam1 = toDouble(allOfTeam1.get("played"));
-                double playedTeam2 = toDouble(allOfTeam2.get("played"));
-                double winTeam1 = toDouble(allOfTeam1.get("win"));
-                double winTeam2 = toDouble(allOfTeam2.get("win"));
-                double drawTeam1 = toDouble(allOfTeam1.get("draw"));
-                double drawTeam2 = toDouble(allOfTeam2.get("draw"));
-                double loseTeam1 = toDouble(allOfTeam1.get("lose"));
-                double loseTeam2 = toDouble(allOfTeam2.get("lose"));
-                double goalsForTeam1 = toDouble(goalsOfTeam1.get("for"));
-                double goalsForTeam2 = toDouble(goalsOfTeam2.get("for"));
-                double goalsAgainstTeam1 = toDouble(goalsOfTeam1.get("against"));
-                double goalsAgainstTeam2 = toDouble(goalsOfTeam2.get("against"));
-                double pointsTeam1 = toDouble(standing.get(team1Idx).get("points"));
-                double pointsTeam2 = toDouble(standing.get(team2Idx).get("points"));
-
-                int totalPointsTeam1 = 0;
-                int totalPointsTeam2 = 0;
-
-                if (playedTeam1 == playedTeam2) { totalPointsTeam1++; totalPointsTeam2++; }
-                if (playedTeam1 > playedTeam2) { totalPointsTeam2++; }
-                if (playedTeam1 < playedTeam2) { totalPointsTeam1++; }
-
-                if (winTeam1 == winTeam2) { totalPointsTeam1++; totalPointsTeam2++; }
-                if (winTeam1 > winTeam2) { totalPointsTeam1++; }
-                if (winTeam1 < winTeam2) { totalPointsTeam2++; }
-
-                if (drawTeam1 == drawTeam2) { totalPointsTeam1++; totalPointsTeam2++; }
-                if (drawTeam1 > drawTeam2) { totalPointsTeam2++; }
-                if (drawTeam1 < drawTeam2) { totalPointsTeam1++; }
-
-                if (loseTeam1 > loseTeam2) { totalPointsTeam2++; }
-                if (loseTeam1 < loseTeam2) { totalPointsTeam1++; }
-
-                if (goalsForTeam1 == goalsForTeam2) {
-                    if (goalsForTeam1 > 20 || goalsForTeam2 > 20) { totalPointsTeam1 += 3; totalPointsTeam2 += 3; }
-                    else { totalPointsTeam1 += 2; totalPointsTeam2 += 2; }
-                }
-                if (goalsForTeam1 > goalsForTeam2) { totalPointsTeam1 += (goalsForTeam1 > 20 ? 3 : 2); }
-                if (goalsForTeam1 < goalsForTeam2) { totalPointsTeam2 += (goalsForTeam2 > 20 ? 3 : 2); }
-
-                if (goalsAgainstTeam1 == goalsAgainstTeam2) {
-                    if (goalsAgainstTeam1 < 8 || goalsAgainstTeam2 < 8) { totalPointsTeam1 += 2; totalPointsTeam2 += 2; }
-                    else { totalPointsTeam1++; totalPointsTeam2++; }
-                }
-                if (goalsAgainstTeam1 > goalsAgainstTeam2) { totalPointsTeam2 += (goalsAgainstTeam2 < 8 ? 2 : 1); }
-                if (goalsAgainstTeam1 < goalsAgainstTeam2) { totalPointsTeam1 += (goalsAgainstTeam1 < 8 ? 2 : 1); }
-
-                if (pointsTeam1 == pointsTeam2) { totalPointsTeam1 += 3; totalPointsTeam2 += 3; }
-                if (pointsTeam1 > pointsTeam2) { totalPointsTeam1 += 3; }
-                if (pointsTeam1 < pointsTeam2) { totalPointsTeam2 += 3; }
-
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> teamObj1 = (java.util.Map<String, Object>) standing.get(team1Idx).get("team");
+                @SuppressWarnings("unchecked")
+                java.util.Map<String, Object> teamObj2 = (java.util.Map<String, Object>) standing.get(team2Idx).get("team");
                 String teamName1 = String.valueOf(teamObj1.get("name"));
                 String teamName2 = String.valueOf(teamObj2.get("name"));
+                int teamId1 = (teamObj1.get("id") instanceof Number) ? ((Number) teamObj1.get("id")).intValue() : 0;
+                int teamId2 = (teamObj2.get("id") instanceof Number) ? ((Number) teamObj2.get("id")).intValue() : 0;
 
-                String outcome;
+                boolean isGroupStage = worldCup || (championsLeague && seasonInt < 2024) || (europaLeague && seasonInt < 2024);
+
+                TeamComparator comparator = new TeamComparator(apiKey, API_HOST);
+                TeamComparator.CompareArgs args = new TeamComparator.CompareArgs();
+                args.leagueId = Integer.parseInt(league);
+                args.season = seasonInt;
+                args.teamId1 = teamId1;
+                args.teamId2 = teamId2;
+                args.isGroupStage = isGroupStage;
+
+                PredictionResult result = comparator.compareTeams(args);
+                // Build backward-compatible response for existing UI, while returning full new fields
+                java.util.Map<String, Object> out = new java.util.HashMap<>();
+                out.put("winner", result.winner == null ? null : result.winner.name());
+                out.put("scoreTeam1", result.scoreTeam1);
+                out.put("scoreTeam2", result.scoreTeam2);
+                out.put("breakdown", result.breakdown);
+                out.put("rawDataRefs", result.rawDataRefs);
+                // compatibility fields expected by app.js
+                out.put("league", league);
+                out.put("season", season);
+                out.put("team1Index", team1IndexOneBased);
+                out.put("team2Index", team2IndexOneBased);
+                out.put("team1Name", teamName1);
+                out.put("team2Name", teamName2);
+                out.put("score1", result.scoreTeam1);
+                out.put("score2", result.scoreTeam2);
+                String outcome = "draw";
                 String winnerName = null;
-                if (totalPointsTeam1 == totalPointsTeam2) {
-                    outcome = "draw";
-                } else if (totalPointsTeam1 > totalPointsTeam2) {
-                    outcome = "team1";
-                    winnerName = teamName1;
-                } else {
-                    outcome = "team2";
-                    winnerName = teamName2;
-                }
-
-                String json = "{"
-                        + "\"league\":\"" + escape(league) + "\","
-                        + "\"season\":\"" + escape(season) + "\","
-                        + "\"team1Index\":" + team1IndexOneBased + ","
-                        + "\"team2Index\":" + team2IndexOneBased + ","
-                        + "\"team1Name\":\"" + escape(teamName1) + "\","
-                        + "\"team2Name\":\"" + escape(teamName2) + "\","
-                        + "\"score1\":" + totalPointsTeam1 + ","
-                        + "\"score2\":" + totalPointsTeam2 + ","
-                        + "\"result\":\"" + outcome + "\","
-                        + "\"winnerName\":" + (winnerName == null ? "null" : "\"" + escape(winnerName) + "\"")
-                        + "}";
-
+                if (result.winner == PredictionResult.Winner.TEAM1) { outcome = "team1"; winnerName = teamName1; }
+                else if (result.winner == PredictionResult.Winner.TEAM2) { outcome = "team2"; winnerName = teamName2; }
+                out.put("result", outcome);
+                out.put("winnerName", winnerName);
+                Gson outGson = new Gson();
+                String json = outGson.toJson(out);
                 sendJson(exchange, 200, json);
             } catch (Exception e) {
                 String message = e.getMessage() == null ? "Internal Server Error" : e.getMessage();
@@ -441,8 +538,18 @@ public class WebServer {
                 // Log the outgoing URL and season hint for quick manual verification
                 System.out.println("Squad request => url=" + url + (season == null ? "" : (", season=" + season)));
 
-                LeagueRequest leagueRequest = new LeagueRequest(new FullResponse());
-                String json = leagueRequest.setRequset(url, apiKey, API_HOST);
+                // 90-second cache to dedupe repeated squad requests (e.g., when reselecting same team)
+                String cacheKey = "squad:" + teamParam;
+                long now = System.currentTimeMillis();
+                CachedItem cached = squadCache.get(cacheKey);
+                String json;
+                if (cached != null && (now - cached.timeMs) < 90_000L && cached.body != null) {
+                    json = cached.body;
+                } else {
+                    LeagueRequest leagueRequest = new LeagueRequest(new FullResponse());
+                    json = leagueRequest.setRequset(url, apiKey, API_HOST);
+                    squadCache.put(cacheKey, new CachedItem(now, json));
+                }
 
                 // Basic sampling/logging of response size
                 System.out.println("Squad response length=" + (json == null ? 0 : json.length()));
@@ -599,7 +706,11 @@ public class WebServer {
 
             String path = exchange.getRequestURI().getPath();
             if (path == null || path.isBlank() || "/".equals(path)) {
-                path = "/index.html";
+                // Redirect root to landing page
+                exchange.getResponseHeaders().set("Location", "/landing.html");
+                exchange.getResponseHeaders().set("Cache-Control", "no-store");
+                exchange.sendResponseHeaders(302, -1);
+                return;
             }
             // prevent simple path traversal
             if (path.contains("..")) {
@@ -624,7 +735,19 @@ public class WebServer {
 				byte[] body = java.nio.file.Files.readAllBytes(fsPath);
 				String contentType = guessContentType(path);
 				exchange.getResponseHeaders().set("Content-Type", contentType);
-				exchange.getResponseHeaders().set("Cache-Control", "no-store, no-cache, must-revalidate");
+				// Add served-from header and caching
+				String servedFrom = fsPath.toAbsolutePath().toString();
+				exchange.getResponseHeaders().set("X-Served-From", servedFrom);
+				// Log important static files
+				String pLower = path.toLowerCase();
+				if (pLower.endsWith("/player.html") || pLower.endsWith("player.html") || pLower.endsWith("/styles.css") || pLower.endsWith("styles.css")) {
+					System.out.println("Static serve (fs): " + path + " -> " + servedFrom);
+				}
+				if (path.toLowerCase().endsWith(".html") || path.toLowerCase().endsWith(".htm")) {
+					exchange.getResponseHeaders().set("Cache-Control", "no-store");
+				} else {
+					exchange.getResponseHeaders().set("Cache-Control", "public, max-age=90");
+				}
 				try {
 					java.nio.file.attribute.FileTime lm = java.nio.file.Files.getLastModifiedTime(fsPath);
 					exchange.getResponseHeaders().set("Last-Modified", String.valueOf(lm.toMillis()));
@@ -649,7 +772,19 @@ public class WebServer {
 				byte[] body = is.readAllBytes();
 				String contentType = guessContentType(path);
 				exchange.getResponseHeaders().set("Content-Type", contentType);
-				exchange.getResponseHeaders().set("Cache-Control", "no-store, no-cache, must-revalidate");
+				// Add served-from header and caching
+				String servedFrom = "classpath:" + resourcePath;
+				exchange.getResponseHeaders().set("X-Served-From", servedFrom);
+				// Log important static files
+				String pLower = path.toLowerCase();
+				if (pLower.endsWith("/player.html") || pLower.endsWith("player.html") || pLower.endsWith("/styles.css") || pLower.endsWith("styles.css")) {
+					System.out.println("Static serve (cp): " + path + " -> " + servedFrom);
+				}
+				if (path.toLowerCase().endsWith(".html") || path.toLowerCase().endsWith(".htm")) {
+					exchange.getResponseHeaders().set("Cache-Control", "no-store");
+				} else {
+					exchange.getResponseHeaders().set("Cache-Control", "public, max-age=90");
+				}
 				exchange.sendResponseHeaders(200, body.length);
 				try (OutputStream os = exchange.getResponseBody()) {
 					os.write(body);
@@ -716,15 +851,7 @@ public class WebServer {
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }
 
-    private static double toDouble(Object o) {
-        if (o == null) return 0d;
-        if (o instanceof Number) return ((Number) o).doubleValue();
-        try {
-            return Double.parseDouble(o.toString());
-        } catch (Exception e) {
-            return 0d;
-        }
-    }
+    // (removed unused toDouble helper)
 }
 
 
