@@ -10,6 +10,8 @@ import com.example.scoreprediction.prediction.PredictionResult;
 import com.example.scoreprediction.prediction.TeamComparator;
 import com.example.scoreprediction.prediction.PlayerComparator;
 import com.example.scoreprediction.prediction.PlayerComparisonResult;
+import com.example.scoreprediction.compare.PlayerComparisonService;
+ 
 
 import java.io.IOException;
 import java.io.OutputStream;
@@ -47,8 +49,8 @@ public class WebServer {
         server.createContext("/predict", new PredictHandler());
         server.createContext("/predict/compare", new ComparePredictHandler());
 		server.createContext("/predict/comparePlayers", new ComparePlayersHandler());
-		// New alias for acceptance criteria
-		server.createContext("/predict/playerCompare", new ComparePlayersHandler());
+		// New raw aggregation comparator (Kfir's logic)
+		server.createContext("/predict/playerCompare", new PlayerRawCompareHandler());
         server.createContext("/squad", new SquadHandler());
         server.createContext("/profiles", new ProfilesHandler());
         server.createContext("/playerProfile", new PlayerProfileHandler());
@@ -98,6 +100,55 @@ public class WebServer {
             }
         }
     }
+
+	// GET /predict/playerCompare?season={year}&player1={id}&player2={id}
+	static class PlayerRawCompareHandler implements HttpHandler {
+		@Override
+		public void handle(HttpExchange exchange) throws IOException {
+			addCorsAndContentType(exchange.getResponseHeaders());
+			exchange.getResponseHeaders().set("Cache-Control", "no-store");
+
+			if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
+				sendJson(exchange, 405, "{\"error\":\"Method Not Allowed\"}");
+				return;
+			}
+
+			try {
+				Map<String, String> q = parseQueryParams(exchange.getRequestURI());
+				String seasonParam = q.get("season");
+				String player1Param = q.get("player1");
+				String player2Param = q.get("player2");
+
+				if (seasonParam == null || seasonParam.isBlank() || player1Param == null || player1Param.isBlank() || player2Param == null || player2Param.isBlank()) {
+					sendJson(exchange, 400, "{\"error\":\"Missing required query params: season, player1, player2\"}");
+					return;
+				}
+
+				int season, p1, p2;
+				try {
+					season = Integer.parseInt(seasonParam);
+					p1 = Integer.parseInt(player1Param);
+					p2 = Integer.parseInt(player2Param);
+				} catch (NumberFormatException nfe) {
+					sendJson(exchange, 400, "{\"error\":\"season, player1, player2 must be integers\"}");
+					return;
+				}
+				if (season <= 0 || p1 <= 0 || p2 <= 0) {
+					sendJson(exchange, 400, "{\"error\":\"All parameters must be positive integers\"}");
+					return;
+				}
+
+				PlayerComparisonService svc = new PlayerComparisonService(apiKey, API_HOST);
+				com.example.scoreprediction.compare.PlayerComparisonResult result = svc.comparePlayers(p1, p2, season);
+				Gson gson = new Gson();
+				String json = gson.toJson(result);
+				sendJson(exchange, 200, json);
+			} catch (Exception e) {
+				String message = e.getMessage() == null ? "Internal Server Error" : e.getMessage();
+				sendJson(exchange, 500, "{\"error\":\"" + escape(message) + "\"}");
+			}
+		}
+	}
 
 	// GET /predict/comparePlayers?league={id}&season={year}&team1={teamId1}&player1={playerId1}&team2={teamId2}&player2={playerId2}
 	static class ComparePlayersHandler implements HttpHandler {

@@ -28,3 +28,17 @@ server.log
 server.err
 logs/
 *.log
+
+# Java
+*.class
+
+# Maven Wrapper
+.mvn/wrapper/maven-wrapper.jar
+.mvn/wrapper/maven-wrapper.properties
+
+# Build outputs
+out/
+
+# Env variants
+*.env.local
+.env.local

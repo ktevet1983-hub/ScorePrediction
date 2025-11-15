@@ -364,53 +364,127 @@ function scoreToPercent(t1, t2) {
 
 function renderResult(container, json) {
 	if (!container) return;
-	const p1 = json?.player1?.name || "Player 1";
-	const p2 = json?.player2?.name || "Player 2";
-	const t1 = json?.team1Name || "";
-	const t2 = json?.team2Name || "";
-	const s1 = Number(json?.scorePlayer1 ?? 0);
-	const s2 = Number(json?.scorePlayer2 ?? 0);
-	const winner = (json?.winner || "").toUpperCase();
-	const pct = scoreToPercent(s1, s2);
+	// Detect new aggregate schema
+	const isAggregate = json && json.player1 && json.player2 && (json.player1.finalScore !== undefined || json.player2.finalScore !== undefined);
+
+	let headerText = "Comparison Result";
+	let bodyHtml = "";
+	if (isAggregate) {
+		const p1obj = json.player1 || {};
+		const p2obj = json.player2 || {};
+		const p1Name = p1obj.name || "Player 1";
+		const p2Name = p2obj.name || "Player 2";
+		const s1Pos = Number(p1obj.totalPositive || 0);
+		const s1Neg = Number(p1obj.totalNegative || 0);
+		const s1Fin = Number(p1obj.finalScore || 0);
+		const s2Pos = Number(p2obj.totalPositive || 0);
+		const s2Neg = Number(p2obj.totalNegative || 0);
+		const s2Fin = Number(p2obj.finalScore || 0);
+		const winner = (json.winner || "").toUpperCase();
+
+		let verdict = "DRAW";
+		if (winner === "PLAYER1") verdict = `${p1Name} wins`;
+		else if (winner === "PLAYER2") verdict = `${p2Name} wins`;
+
+		const break1 = Array.isArray(p1obj.perCompetition) ? p1obj.perCompetition : [];
+		const break2 = Array.isArray(p2obj.perCompetition) ? p2obj.perCompetition : [];
+
+		const rows1 = break1.map((b) => {
+			const lg = b?.leagueName ?? (b?.leagueId != null ? `League ${b.leagueId}` : "-");
+			const pos = Number(b?.positive ?? 0);
+			const neg = Number(b?.negative ?? 0);
+			return `<tr><td>${lg}</td><td class="mono">${pos}</td><td class="mono">${neg}</td></tr>`;
+		}).join("");
+		const rows2 = break2.map((b) => {
+			const lg = b?.leagueName ?? (b?.leagueId != null ? `League ${b.leagueId}` : "-");
+			const pos = Number(b?.positive ?? 0);
+			const neg = Number(b?.negative ?? 0);
+			return `<tr><td>${lg}</td><td class="mono">${pos}</td><td class="mono">${neg}</td></tr>`;
+		}).join("");
+
+		bodyHtml = `
+			<div class="sp-row" style="gap:12px; align-items:stretch; flex-wrap:wrap;">
+				<div class="sp-card" style="flex:1; min-width:260px;">
+					<div class="sp-card__header">${p1Name}</div>
+					<div style="padding:12px">
+						<div><strong>Positive:</strong> ${s1Pos}</div>
+						<div><strong>Negative:</strong> ${s1Neg}</div>
+						<div><strong>Final score:</strong> ${s1Fin}</div>
+						<div style="margin-top:8px; overflow:auto;">
+							<table class="sp-table">
+								<thead><tr><th>Competition</th><th>Positive</th><th>Negative</th></tr></thead>
+								<tbody>${rows1}</tbody>
+							</table>
+						</div>
+					</div>
+				</div>
+				<div class="sp-card" style="flex:1; min-width:260px;">
+					<div class="sp-card__header">${p2Name}</div>
+					<div style="padding:12px">
+						<div><strong>Positive:</strong> ${s2Pos}</div>
+						<div><strong>Negative:</strong> ${s2Neg}</div>
+						<div><strong>Final score:</strong> ${s2Fin}</div>
+						<div style="margin-top:8px; overflow:auto;">
+							<table class="sp-table">
+								<thead><tr><th>Competition</th><th>Positive</th><th>Negative</th></tr></thead>
+								<tbody>${rows2}</tbody>
+							</table>
+						</div>
+					</div>
+				</div>
+			</div>
+			<div style="margin-top:8px;"><strong>Winner:</strong> ${verdict}</div>
+		`;
+	} else {
+		// Backward compatibility with existing comparator response
+		const p1 = json?.player1?.name || "Player 1";
+		const p2 = json?.player2?.name || "Player 2";
+		const t1 = json?.team1Name || "";
+		const t2 = json?.team2Name || "";
+		const s1 = Number(json?.scorePlayer1 ?? 0);
+		const s2 = Number(json?.scorePlayer2 ?? 0);
+		const winner = (json?.winner || "").toUpperCase();
+		const pct = scoreToPercent(s1, s2);
+
+		let verdict = "It’s too close to call — DRAW";
+		if (winner === "PLAYER1") verdict = `We would pick ${p1}`;
+		else if (winner === "PLAYER2") verdict = `We would pick ${p2}`;
+
+		const line = `${t1 ? `${t1} — ` : ""}${p1}: ${s1} points (${pct.p1}%), ${t2 ? `${t2} — ` : ""}${p2}: ${s2} points (${pct.p2}%)`;
+
+		let breakdownHtml = "";
+		if (Array.isArray(json?.breakdown) && json.breakdown.length) {
+			const rows = json.breakdown.map(b => {
+				const metric = b?.metric || "-";
+				const v1 = b?.p1 ?? "-";
+				const v2 = b?.p2 ?? "-";
+				const note = b?.note || "";
+				return `<tr><td>${metric}</td><td class="mono">${v1}</td><td class="mono">${v2}</td><td>${note}</td></tr>`;
+			}).join("");
+			breakdownHtml = `
+				<div style="margin-top:12px;overflow:auto;">
+					<table class="sp-table">
+						<thead><tr><th>Metric</th><th>P1</th><th>P2</th><th>Note</th></tr></thead>
+						<tbody>${rows}</tbody>
+					</table>
+				</div>
+			`;
+		}
+		bodyHtml = `
+			<div style="margin-bottom:8px">${line}</div>
+			<div><strong>${verdict}</strong></div>
+			${breakdownHtml}
+		`;
+	}
 
 	const wrap = document.createElement("div");
 	wrap.className = "sp-card";
 	const header = document.createElement("div");
 	header.className = "sp-card__header";
-	header.textContent = "Comparison Result";
+	header.textContent = headerText;
 	const body = document.createElement("div");
 	body.style.padding = "12px";
-
-	let verdict = "It’s too close to call — DRAW";
-	if (winner === "PLAYER1") verdict = `We would pick ${p1}`;
-	else if (winner === "PLAYER2") verdict = `We would pick ${p2}`;
-
-	const line = `${t1 ? `${t1} — ` : ""}${p1}: ${s1} points (${pct.p1}%), ${t2 ? `${t2} — ` : ""}${p2}: ${s2} points (${pct.p2}%)`;
-
-	let breakdownHtml = "";
-	if (Array.isArray(json?.breakdown) && json.breakdown.length) {
-		const rows = json.breakdown.map(b => {
-			const metric = b?.metric || "-";
-			const v1 = b?.p1 ?? "-";
-			const v2 = b?.p2 ?? "-";
-			const note = b?.note || "";
-			return `<tr><td>${metric}</td><td class="mono">${v1}</td><td class="mono">${v2}</td><td>${note}</td></tr>`;
-		}).join("");
-		breakdownHtml = `
-			<div style="margin-top:12px;overflow:auto;">
-				<table class="sp-table">
-					<thead><tr><th>Metric</th><th>P1</th><th>P2</th><th>Note</th></tr></thead>
-					<tbody>${rows}</tbody>
-				</table>
-			</div>
-		`;
-	}
-
-	body.innerHTML = `
-		<div style="margin-bottom:8px">${line}</div>
-		<div><strong>${verdict}</strong></div>
-		${breakdownHtml}
-	`;
+	body.innerHTML = bodyHtml;
 	wrap.appendChild(header);
 	wrap.appendChild(body);
 	clearChildren(container);
@@ -450,7 +524,8 @@ async function comparePlayers(resultEl, compareBtn) {
 		return;
 	}
 
-	const url = `/predict/comparePlayers?league=${encodeURIComponent(l1)}&season=${encodeURIComponent(s1)}&team1=${encodeURIComponent(String(selectedPlayer1.teamId || ""))}&player1=${encodeURIComponent(String(selectedPlayer1.playerId || ""))}&team2=${encodeURIComponent(String(selectedPlayer2.teamId || ""))}&player2=${encodeURIComponent(String(selectedPlayer2.playerId || ""))}`;
+	// New raw aggregate comparison endpoint (no league/team needed)
+	const url = `/predict/playerCompare?season=${encodeURIComponent(s1)}&player1=${encodeURIComponent(String(selectedPlayer1.playerId || ""))}&player2=${encodeURIComponent(String(selectedPlayer2.playerId || ""))}`;
 
 	try {
 		setButtonDisabled(compareBtn, true);
